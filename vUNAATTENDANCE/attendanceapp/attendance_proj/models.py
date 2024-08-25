@@ -1,0 +1,346 @@
+from django.db import models
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
+import csv
+import os
+
+
+# Create your models here.
+class Student(models.Model):
+    student_id = models.CharField(max_length=10)
+    student_name = models.CharField(max_length=50)
+    student_email = models.EmailField(max_length=50)
+    student_dept = models.CharField(max_length=50)
+    student_course = models.CharField(max_length=10)
+    student_address = models.CharField(max_length=100)
+    student_dob = models.DateField()
+    student = models.Manager()
+
+
+class Attendance(models.Model):
+    student_id = models.ForeignKey(Student, on_delete=models.CASCADE)
+    date = models.DateField()
+    status = models.CharField(max_length=10)
+    attendance = models.Manager()
+
+
+class Machine(models.Model):
+    machine_id = models.CharField(max_length=10)
+    machine_name = models.CharField(max_length=50)
+    dept = models.CharField(max_length=50)
+    venue = models.CharField(max_length=50)
+    student_name = models.CharField(max_length=50)
+    matric_number = models.CharField(max_length=10)
+    machine = models.Manager()
+
+
+class TimeTable(models.Model):
+    machine_id = models.ForeignKey(Machine, on_delete=models.CASCADE)
+    date = models.DateField()
+    time = models.TimeField()
+    course = models.CharField(max_length=50)
+    venue = models.CharField(max_length=50)
+    course_code = models.CharField(max_length=10)
+    course_lecturer = models.CharField(max_length=50)
+    timetable = models.Manager()
+
+
+class AttendanceReport(models.Model):
+    student_id = models.ForeignKey(Student, on_delete=models.CASCADE)
+    date = models.DateField()
+    dept = models.CharField(max_length=50)
+    course_code = models.CharField(max_length=10)
+    course_lecturer = models.CharField(max_length=50)
+    matric_number = models.CharField(max_length=10)
+    status = models.CharField(max_length=10)
+    attendance_score = models.IntegerField()
+    attendance_report = models.Manager()
+
+
+class AdminManager(BaseUserManager):
+    def create_user(self, admin_email, password=None, **extra_fields):
+        if not admin_email:
+            raise ValueError('The Email field must be set')
+        email = self.normalize_email(admin_email)
+        user = self.model(admin_email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, admin_email, admin_password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        return self.create_user(admin_email, admin_password, **extra_fields)
+
+
+class Admin(AbstractBaseUser):
+    admin_fname = models.CharField(max_length=30)
+    admin_lname = models.CharField(max_length=30)
+    admin_email = models.EmailField(max_length=255, unique=True)
+    admin_dept = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=True)
+    admin_password = models.CharField(max_length=128)  # Default value
+
+    is_superuser = models.BooleanField(default=True)
+
+    objects = AdminManager()
+
+    USERNAME_FIELD = 'admin_email'
+    REQUIRED_FIELDS = ['admin_fname', 'admin_lname', 'admin_dept']
+
+    class Meta:
+        app_label = 'attendance_proj'
+
+    def __str__(self):
+        return self.admin_email
+
+
+class Student_comp_sci_100L(models.Model):
+    student_id = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=100)
+    matric_num = models.CharField(max_length=20, unique=True)
+    CSC_101 = models.IntegerField(default=0)
+    CSC_102 = models.IntegerField(default=0)
+    CSC_105 = models.IntegerField(default=0)
+    CSC_111 = models.IntegerField(default=0)
+    level = models.IntegerField(default=100)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+    def __str__(self):
+        return self.student_name
+
+
+#  COMPUTER SCIENCE MODEL 100 - 400L
+
+class Comp_sci_100l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    CSC_101 = models.IntegerField(default=0)
+    CSC_102 = models.IntegerField(default=0)
+    CSC_105 = models.IntegerField(default=0)
+    CSC_111 = models.IntegerField(default=0)
+    level = models.IntegerField(default=100)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+class Comp_sci_200l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    CSC_201 = models.IntegerField(default=0)
+    CSC_202 = models.IntegerField(default=0)
+    CSC_203 = models.IntegerField(default=0)
+    CSC_204 = models.IntegerField(default=0)
+    level = models.IntegerField(default=200)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+class Comp_sci_300l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    CSC_301 = models.IntegerField(default=0)
+    CSC_302 = models.IntegerField(default=0)
+    CSC_303 = models.IntegerField(default=0)
+    CSC_304 = models.IntegerField(default=0)
+    level = models.IntegerField(default=300)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+class Comp_sci_400l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    CSC_401 = models.IntegerField(default=0)
+    CSC_402 = models.IntegerField(default=0)
+    CSC_403 = models.IntegerField(default=0)
+    CSC_404 = models.IntegerField(default=0)
+    level = models.IntegerField(default=400)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+# political SCIENCE MODEL 100 - 400L
+class Pol_sci_100l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    POL_101 = models.IntegerField(default=0)
+    POL_102 = models.IntegerField(default=0)
+    POL_103 = models.IntegerField(default=0)
+    POL_104 = models.IntegerField(default=0)
+    level = models.IntegerField(default=100)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+class Pol_sci_200l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    POL_201 = models.IntegerField(default=0)
+    POL_202 = models.IntegerField(default=0)
+    POL_203 = models.IntegerField(default=0)
+    POL_204 = models.IntegerField(default=0)
+    level = models.IntegerField(default=200)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+class Pol_sci_300l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    POL_301 = models.IntegerField(default=0)
+    POL_302 = models.IntegerField(default=0)
+    POL_303 = models.IntegerField(default=0)
+    POL_304 = models.IntegerField(default=0)
+    level = models.IntegerField(default=300)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+class Pol_sci_400l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    POL_401 = models.IntegerField(default=0)
+    POL_402 = models.IntegerField(default=0)
+    POL_403 = models.IntegerField(default=0)
+    POL_404 = models.IntegerField(default=0)
+    level = models.IntegerField(default=400)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+#  ECONOMICS MODEL 100 - 400L
+class Econ_100l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    ECO_101 = models.IntegerField(default=0)
+    ECO_102 = models.IntegerField(default=0)
+    ECO_103 = models.IntegerField(default=0)
+    ECO_104 = models.IntegerField(default=0)
+    level = models.IntegerField(default=100)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+class Econ_200l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    ECO_201 = models.IntegerField(default=0)
+    ECO_202 = models.IntegerField(default=0)
+    ECO_203 = models.IntegerField(default=0)
+    ECO_204 = models.IntegerField(default=0)
+    level = models.IntegerField(default=200)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+class Econ_300l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    ECO_301 = models.IntegerField(default=0)
+    ECO_302 = models.IntegerField(default=0)
+    ECO_303 = models.IntegerField(default=0)
+    ECO_304 = models.IntegerField(default=0)
+    level = models.IntegerField(default=300)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+class Econ_400l(models.Model):
+    matric_num = models.CharField(max_length=20, unique=True)
+    student_name = models.CharField(max_length=50)
+    ECO_401 = models.IntegerField(default=0)
+    ECO_402 = models.IntegerField(default=0)
+    ECO_403 = models.IntegerField(default=0)
+    ECO_404 = models.IntegerField(default=0)
+    level = models.IntegerField(default=400)
+    week = models.IntegerField(default=1)
+    total_attendance_score = models.IntegerField(default=0)
+
+
+# LAW 100-400L MODELS
+    class Law_100l(models.Model):
+        matric_num = models.CharField(max_length=20, unique=True)
+        student_name = models.CharField(max_length=50)
+        LAW_101 = models.IntegerField(default=0)
+        LAW_102 = models.IntegerField(default=0)
+        LAW_103 = models.IntegerField(default=0)
+        LAW_104 = models.IntegerField(default=0)
+        level = models.IntegerField(default=100)
+        week = models.IntegerField(default=1)
+        total_attendance_score = models.IntegerField(default=0)
+
+    class Law_200l(models.Model):
+        mateic_num = models.CharField(max_length=20, unique=True)
+        student_name = models.CharField(max_length=50)
+        LAW_201 = models.IntegerField(default=0)
+        LAW_202 = models.IntegerField(default=0)
+        LAW_203 = models.IntegerField(default=0)
+        LAW_204 = models.IntegerField(default=0)
+        level = models.IntegerField(default=200)
+        week = models.IntegerField(default=1)
+        total_attendance_score = models.IntegerField(default=0)
+
+    class Law_300l(models.Model):
+        matric_num = models.CharField(max_length=20, unique=True)
+        student_name = models.CharField(max_length=50)
+        LAW_301 = models.IntegerField(default=0)
+        LAW_302 = models.IntegerField(default=0)
+        LAW_303 = models.IntegerField(default=0)
+        LAW_304 = models.IntegerField(default=0)
+        level = models.IntegerField(default=300)
+        week = models.IntegerField(default=1)
+        total_attendance_score = models.IntegerField(default=0)
+
+    class Law_400l(models.Model):
+        matric_num = models.CharField(max_length=20, unique=True)
+        student_name = models.CharField(max_length=50)
+        LAW_401 = models.IntegerField(default=0)
+        LAW_402 = models.IntegerField(default=0)
+        LAW_403 = models.IntegerField(default=0)
+        LAW_404 = models.IntegerField(default=0)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    @classmethod
+    def import_comp_sci_100l_csv(cls, csv_directory_path):
+        csv_files = [file for file in os.listdir(csv_directory_path) if file.endswith('.csv')]
+        csv_files.sort(key=lambda x: os.path.getmtime(os.path.join(csv_directory_path, x)), reverse=True)
+        latest_csv_file = csv_files[0]
+        latest_csv_file_path = os.path.join(csv_directory_path, latest_csv_file)
+
+        with open(latest_csv_file_path, mode='r') as csvfile:
+            reader = csv.reader(csvfile)
+            next(reader)  # Skip the header row if present
+            for row in reader:
+                matric_num_value = row[3]
+                student_name_value = row[4]
+                student, created = Comp_sci_100l.objects.get_or_create(
+                    matric_num=matric_num_value,
+                    defaults={'student_name': student_name_value}
+                )
+                attendance = cls(
+                    matric_num=student,
+                    student_name=student_name_value,
+                )
+                attendance.save()
