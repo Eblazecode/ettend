@@ -112,6 +112,93 @@ class Student_comp_sci_100L(models.Model):
         return self.student_name
 
 
+# STAFF MODEL
+class Staff(models.Model):
+    staff_id = models.CharField(max_length=20, unique=True)
+    staff_name = models.CharField(max_length=50)
+    staff_dept = models.CharField(max_length=50)
+    total_attendance_score = models.IntegerField()
+    remarks = models.CharField(max_length=100)
+
+
+# STAFF EVENTS 1 CONFERENCE MODEL, 2 WORKSHOP MODEL, 3 SEMINAR MODEL, 4 TRAINING MODEL, 5 RETREAT MODEL, 6 MEETING MODEL
+from django.db import models
+from django.utils import timezone
+from datetime import date
+
+today = date.today()
+today.strftime("%d/%m/%Y")
+today_format = today.strftime("%d/%m/%Y")
+
+
+def get_current_time():
+    return timezone.now().time()
+
+
+class staff_Conference(models.Model):
+    machine_id = models.CharField(max_length=50)
+    staff_id = models.CharField(max_length=20, unique=True)
+    staff_name = models.CharField(max_length=50)
+    staff_dept = models.CharField(max_length=50)
+    conference_title = models.CharField(max_length=50,default="conference")
+    conference_venue = models.CharField(max_length=50,default="venue")
+    conference_date = models.DateField(default=timezone.now)
+    conference_time = models.TimeField(default=get_current_time())
+    conference_type = models.CharField(max_length=50, default="type conf")
+    conference_category = models.CharField(max_length=50, default="category")
+    clock_in = models.TimeField()
+    clock_out = models.TimeField()
+    remarks = models.CharField(max_length=100)
+    attendance_score = models.IntegerField(default=0)
+    conference = models.Manager()
+
+
+class Workshop(models.Model):
+    staff_id = models.ForeignKey(Staff, on_delete=models.CASCADE)
+    workshop_name = models.CharField(max_length=50)
+    workshop_venue = models.CharField(max_length=50)
+    workshop_date = models.DateField()
+    workshop_time = models.TimeField()
+    clock_in = models.TimeField()
+    clock_out = models.TimeField()
+    workshop = models.Manager()
+
+
+class Seminar(models.Model):
+    staff_id = models.ForeignKey(Staff, on_delete=models.CASCADE)
+    seminar_name = models.CharField(max_length=50)
+    seminar_venue = models.CharField(max_length=50)
+    seminar_date = models.DateField()
+    seminar_time = models.TimeField()
+    clock_in = models.TimeField()
+    clock_out = models.TimeField()
+    seminar = models.Manager()
+
+
+class Training(models.Model):
+    staff_id = models.ForeignKey(Staff, on_delete=models.CASCADE)
+    training_name = models.CharField(max_length=50)
+    training_venue = models.CharField(max_length=50)
+    training_date = models.DateField()
+    training_time = models.TimeField()
+    clock_in = models.TimeField()
+    clock_out = models.TimeField()
+    training = models.Manager()
+
+
+class Mass(models.Model):
+    staff_id = models.ForeignKey(Staff, on_delete=models.CASCADE)
+    retreat_name = models.CharField(max_length=50)
+    retreat_venue = models.CharField(max_length=50)
+    retreat_date = models.DateField()
+    retreat_time = models.TimeField()
+    clock_in = models.TimeField()
+    clock_out = models.TimeField()
+    retreat = models.Manager()
+
+    staff = models.Manager()
+
+
 #  COMPUTER SCIENCE MODEL 100 - 400L
 
 class Comp_sci_100l(models.Model):
@@ -137,6 +224,7 @@ class Comp_sci_200l(models.Model):
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
 
+
 class Comp_sci_300l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
     student_name = models.CharField(max_length=50)
@@ -160,6 +248,7 @@ class Comp_sci_400l(models.Model):
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
 
+
 # political SCIENCE MODEL 100 - 400L
 class Pol_sci_100l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
@@ -172,6 +261,7 @@ class Pol_sci_100l(models.Model):
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
 
+
 class Pol_sci_200l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
     student_name = models.CharField(max_length=50)
@@ -182,6 +272,7 @@ class Pol_sci_200l(models.Model):
     level = models.IntegerField(default=200)
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
+
 
 class Pol_sci_300l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
@@ -231,6 +322,7 @@ class Econ_200l(models.Model):
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
 
+
 class Econ_300l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
     student_name = models.CharField(max_length=50)
@@ -241,6 +333,7 @@ class Econ_300l(models.Model):
     level = models.IntegerField(default=300)
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
+
 
 class Econ_400l(models.Model):
     matric_num = models.CharField(max_length=20, unique=True)
@@ -253,8 +346,7 @@ class Econ_400l(models.Model):
     week = models.IntegerField(default=1)
     total_attendance_score = models.IntegerField(default=0)
 
-
-# LAW 100-400L MODELS
+    # LAW 100-400L MODELS
     class Law_100l(models.Model):
         matric_num = models.CharField(max_length=20, unique=True)
         student_name = models.CharField(max_length=50)
@@ -295,32 +387,6 @@ class Econ_400l(models.Model):
         LAW_402 = models.IntegerField(default=0)
         LAW_403 = models.IntegerField(default=0)
         LAW_404 = models.IntegerField(default=0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     @classmethod
     def import_comp_sci_100l_csv(cls, csv_directory_path):

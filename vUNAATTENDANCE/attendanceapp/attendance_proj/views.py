@@ -14,9 +14,12 @@ from django.contrib.auth import authenticate, login, get_backends, logout
 from django.contrib.auth.models import User
 from django.shortcuts import render, redirect
 from django.contrib import messages
+from django.template.defaultfilters import date
+from django.utils import timezone
 from psycopg2.extras import RealDictCursor
 
-from .forms import AdminForm, AdminLoginForm, Upload_timetable_form, MachineForm,Upload_registered_students
+from .forms import AdminForm, AdminLoginForm, Upload_timetable_form, MachineForm, Upload_registered_students, \
+    Upload_staff_events_attendance
 from datetime import datetime
 import psycopg2
 
@@ -26,6 +29,7 @@ from django.http import JsonResponse, request
 import csv
 import pandas as pd
 from django.core.cache import cache  # Assuming Django's default caching framework is used
+from datetime import date
 
 
 # Create your views here.
@@ -212,7 +216,10 @@ def machine_attendance_upload(request):
 
             # Save DataFrame to CSV file
             df.to_csv(file_path, index=False)
+            quality_assurance_report(request)
+
             return redirect('success_url')
+
             #messages.success(request, 'File uploaded successfully')
             #print(f'File saved to {file_path}')  # Debug print
 
@@ -291,6 +298,7 @@ def quality_assurance_report(request):
 
     current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     filename = f'QUALITYASSURANCE/student_merged_attendance_report{current_date}.csv'
+    print(f'File saved to {filename}')  # Debug print
     student_attend_merged_file_path = os.path.join(settings.MEDIA_ROOT, filename)
     df_merged.to_csv(student_attend_merged_file_path, index=False)
 
@@ -302,13 +310,11 @@ def quality_assurance_report(request):
 
 logger = logging.getLogger(__name__)
 
+
 # Consolidated CSV reading function
-import csv
 
 # MAKING NEW CHANGES TO THE VIEWS.PY FILE
 # functions to import the courses csv files
-
-import csv
 
 
 def read_csv_to_list(file_path):
@@ -504,10 +510,38 @@ def generate_attendance(request):
 
     except Exception as e:
         messages.error(request, str(e))
+
+        print("No data found for the given department, level, and course code")
         return render(request, 'student_attendance_report.html')
 
 
 # update comp_sci_100l table wth filtered data
+
+
+from pathlib import Path
+
+
+def save_filtered_data(department, level, course_code, filtered_df, folder_name):
+    current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    file_dir = Path(settings.MEDIA_ROOT) / f'WEEKLY_ATTENDANCE/{folder_name}/{level}l'
+    file_dir.mkdir(parents=True, exist_ok=True)
+    file_path = file_dir / f'{course_code}_{current_date}.csv'
+
+    if file_path.exists():
+        existing_df = pd.read_csv(file_path)
+        if 'attendance_score' not in filtered_df.columns:
+            filtered_df['attendance_score'] = 1
+        merged_df = pd.merge(existing_df, filtered_df, on='Userprofile', how='outer')
+        merged_df['attendance_score'] = merged_df['attendance_score_x'].fillna(0) + merged_df[
+            'attendance_score_y'].fillna(1)
+        merged_df.drop(columns=['attendance_score_x', 'attendance_score_y'], inplace=True)
+        merged_df.to_csv(file_path, index=False)
+    else:
+        if 'attendance_score' not in filtered_df.columns:
+            filtered_df['attendance_score'] = 1
+        filtered_df.to_csv(file_path, index=False)
+
+    print(f'File saved to {file_path}')
 
 
 def load_and_filter_data(department, level, course_code):
@@ -515,171 +549,63 @@ def load_and_filter_data(department, level, course_code):
         'ID': str, 'Name': str, 'Dept': str, 'Userprofile': str, 'SN': int,
         'Coursetitle': str, 'CourseCode': str, 'Level': int,
     }
-    quality_folder = os.path.join(settings.MEDIA_ROOT, 'QUALITYASSURANCE')
-    most_recent_file = max(
-        os.listdir(quality_folder),
-        key=lambda x: os.path.getmtime(os.path.join(quality_folder, x))
-    )
-    most_recent_file_path = os.path.join(quality_folder, most_recent_file)
 
-    # Use on_bad_lines='skip' to skip lines with too many fields
-    df = pd.read_csv(most_recent_file_path, delimiter=',', dtype=column_types, engine='python', encoding='latin-1')
+    quality_folder = Path(settings.MEDIA_ROOT) / 'QUALITYASSURANCE'
+    most_recent_file = max(quality_folder.glob('*'), key=lambda x: x.stat().st_mtime)
 
-    # Print the first few rows of the DataFrame
-    print("First few rows of the DataFrame:")
-    print(df.head())
+    if not most_recent_file:
+        print("No attendance records uploaded yet")
+        return
 
-    # Debug: Print unique values in Dept and CourseCode columns
-    print("\nUnique values in Dept column before stripping and uppercasing:")
-    print(df['Dept'].unique())
-    print("Unique values in CourseCode column before stripping and uppercasing:")
-    print(df['CourseCode'].unique())
+    df = pd.read_csv(most_recent_file, delimiter=',', dtype=column_types, engine='python', encoding='latin-1')
 
-    # Strip and uppercase the filter values
     department = department.strip().upper()
     course_code = course_code.strip().upper()
 
-    # Intermediate filtering steps
     dept_filtered = df['Dept'].str.strip().str.upper() == department
     level_filtered = df['Level'] == level
     course_code_filtered = df['CourseCode'].str.strip().str.upper() == course_code
 
-    print("\nDepartment variable after stripping and uppercasing:", department)
-    print("Course code variable after stripping and uppercasing:", course_code)
-
-    # Print the intermediate filter results
-    print("\nDept Filter Result:")
-    print(dept_filtered)
-    print("Level Filter Result:")
-    print(level_filtered)
-    print("Course Code Filter Result:")
-    print(course_code_filtered)
-
-    # Apply the filters
     filtered_df = df[dept_filtered & level_filtered & course_code_filtered]
 
-    print("Filtered DataFrame is empty:", filtered_df.empty)
-    print("Filtered DataFrame:")
-    print(filtered_df)
-
-    # SAVE FILTERED DATA TO A CSV FILE IN THE FILTERED_DATA FOLDER BY DEPARTMENT AND LEVEL
-    # Check if the department and level match specific criteria
-    if department == 'Computer Science'.upper() and level == 100:
-        # Assuming 'course_code' and 'filtered_df' are defined
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        file_dir = os.path.join(settings.MEDIA_ROOT, 'WEEKLY_ATTENDANCE/computer_science/100l')
-        filename = f'FILTERED_DATA/computer_sci/100l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # Check if the file already exists
-        if os.path.exists(file_path):
-            # Read the existing data
-            existing_df = pd.read_csv(file_path)
-
-            # Check if 'attendance_score' column exists in the new data
-            if 'attendance_score' not in filtered_df.columns:
-                # Initialize 'attendance_score' in new data if it doesn't exist
-                filtered_df['attendance_score'] = 1
-
-            # Merge the new data with the existing data
-            # Assuming 'student_id' is the unique identifier
-            merged_df = pd.merge(existing_df, filtered_df, on='Userprofile', how='outer')
-
-
-            # Update 'attendance_score' in the merged DataFrame
-            # This logic may need to be adjusted based on how you want to calculate the updated scores
-            merged_df['attendance_score'] = merged_df['attendance_score_x'].fillna(0) + merged_df[
-                'attendance_score_y'].fillna(1)
-
-            # Drop the extra columns created by the merge operation
-            merged_df.drop(columns=['attendance_score_x', 'attendance_score_y'], inplace=True)
-
-            # Save the merged DataFrame back to the same file
-            merged_df.to_csv(file_path, index=False)
-            print(merged_df.head())
-
-
-        else:
-                # If the file doesn't exist, simply save the new data
-                # Initialize 'attendance_score' if it doesn't exist
-                if 'attendance_score' not in filtered_df.columns:
-                    filtered_df['attendance_score'] = 1
-    
-                filtered_df.to_csv(file_path, index=False)
-                print(f'File saved to {file_path}')
-                
-
-
-    elif department == 'Computer Science'.upper() and level == 200:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/computer_sci200l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        filtered_df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-    elif department == 'Computer Science'.upper() and level == 400:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/computer_sci200l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # add the colum to serve as attendance score Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        filtered_df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-        # SAME THING FOR Political Science and Diplomacy department
-    elif department == 'Political Science and Diplomacy'.upper() and level == 100:
-        unique_id = uuid.uuid4()
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/political_sci/100l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # add the colum to serve as attendance score Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-    elif department == 'Political Science and Diplomacy'.upper() and level == 200:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/political_sci/200l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # add the colum to serve as attendance score Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        filtered_df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-    elif department == 'Political Science and Diplomacy'.upper() and level == 300:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/political_sci/300l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # add the colum to serve as attendance score Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        filtered_df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-    elif department == 'Political Science and Diplomacy'.upper() and level == 400:
-        current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
-        filename = f'FILTERED_DATA/political_sci/400l/{course_code}_{current_date}.csv'
-        file_path = os.path.join(settings.MEDIA_ROOT, filename)
-
-        # add the colum to serve as attendance score Save the DataFrame to a CSV file
-        filtered_df['attendance_score'] = 1
-        filtered_df.to_csv(file_path, index=False)
-        print(f'File saved to {file_path}')
-
-    else:
-        print("Invalid department, level, or course code.")
     if filtered_df.empty:
         raise ValueError('No data found for the given department, level, and course code')
 
-    filtered_data = filtered_df.to_dict(orient='records')
+    folder_map = {
+        ('COMPUTER SCIENCE', 100): 'computer_sci/100l',
+        ('COMPUTER SCIENCE', 200): 'computer_sci/200l',
+        ('COMPUTER SCIENCE', 400): 'computer_sci/400l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 100): 'political_sci/100l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 200): 'political_sci/200l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 300): 'political_sci/300l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 400): 'political_sci/400l',
+    }
+
+    # database tables folder_map for each department and level
+    db_tables_folder_map = {
+        ('COMPUTER SCIENCE', 100): 'attendance_proj_comp_sci_100l',
+        ('COMPUTER SCIENCE', 200): 'attendance_proj_comp_sci_200l',
+        ('COMPUTER SCIENCE', 300): 'attendance_proj_comp_sci_300l',
+        ('COMPUTER SCIENCE', 400): 'attendance_proj_comp_sci_400l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 100): 'attendance_proj_pol_sci_100l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 200): 'attendance_proj_pol_sci_200l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 300): 'attendance_proj_pol_sci_300l',
+        ('POLITICAL SCIENCE AND DIPLOMACY', 400): 'attendance_proj_pol_sci_400l',
+    }
+
+    folder_name = folder_map.get((department, level))
+
+    if folder_name:
+        save_filtered_data(department, level, course_code, filtered_df, folder_name)
+
+        # Update the database with the new attendance scores for each course in department using mat no and course code
+
+
+    else:
+        print("Invalid department, level, or course code")
+
     weekly_attendance()
-    return filtered_data
+    return filtered_df.to_dict(orient='records')
 
 
 # UNSCHEDULED EVENTS ATTENDANCE PROCESSING CAPTURED BY MACHINE HANDLING
@@ -711,7 +637,9 @@ def track_attendance(request):
 
         try:
             filtered_data = load_and_filter_data(department, level_int, course)
+            update_each_course_attendance_score(department, level, course, filtered_data)
             return render(request, 'summary_attend.html', {'filtered_data': filtered_data})
+
         except Exception as e:
             messages.error(request, str(e))
             # If an error occurs, still render the page but without filtered_data
@@ -720,7 +648,6 @@ def track_attendance(request):
     else:
         # If not POST, or after handling POST, render a default or error page
         return render(request, 'some_default_or_error_page.html')
-
 
 
 def weekly_attendance():
@@ -780,9 +707,62 @@ def weekly_attendance():
     print("Database updated successfully")
 
 
+def update_each_score(request):
+    render(request, 'update_weekly_attendance.html')
 
 
+def update_each_course_attendance_score(department, level, course_code, filtered_df):
+    current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    file_dir = Path(settings.MEDIA_ROOT) / f'WEEKLY_ATTENDANCE/{department.lower().replace(" ", "_")}/{level}l'
+    file_dir.mkdir(parents=True, exist_ok=True)
+    file_path = file_dir / f'{course_code}_{current_date}.csv'
+    filtered_df.to_csv(file_path, index=False)
 
+    # Connect to the PostgreSQL database
+    try:
+        conn = psycopg2.connect(
+            dbname='ettend_db',
+            user='postgres',
+            password='blaze',
+            host='localhost',
+            port='5432'
+        )
+        cur = conn.cursor()
+
+        # Sanitize table name inputs
+        table_name = f'attendance_proj_{department.lower().replace(" ", "_")}_{level}l'
+        cur.execute(f"SELECT column_name FROM information_schema.columns WHERE table_name = %s",
+                    (table_name,))
+        table_columns = [row[0] for row in cur.fetchall()]
+
+        # Compare table columns and DataFrame columns
+        df_columns = filtered_df.columns.tolist()
+        common_columns = set(table_columns).intersection(df_columns)
+
+        if not common_columns:
+            print("No common columns found. No updates will be performed.")
+            return
+
+        # Bulk update data
+        for index, row in filtered_df.iterrows():
+            set_clause = ", ".join([f"{col} = %s" for col in common_columns])
+            query = f"""
+            UPDATE ettend_db.public.{table_name}
+            SET {set_clause}
+            WHERE matric_num = %s AND course_code = %s
+            """
+            values = [row[col] for col in common_columns] + [row['matric_num'], course_code]
+            cur.execute(query, values)
+            print(f"Rows updated: {cur.rowcount}")
+
+        conn.commit()
+        print("Database updated successfully")
+
+    except psycopg2.DatabaseError as e:
+        print(f"Database error: {e}")
+    finally:
+        cur.close()
+        conn.close()
 
 
 # CREATE THE DATABASE RECORDS OF REGISTRED STUDENTS FROM EACH LEVEL IN A DEPARTMENT FROM CSV FILE UPLOAD
@@ -816,8 +796,6 @@ def Update_weekely_attendance_DB(request):
                 except Exception as e:
                     messages.error(request, f"An error occurred while processing the file: {e}")
 
-
-
                 # List CSV files in the directories
                 try:
                     level_int = int(level) if level else 0  # Assuming 0 as a default, adjust as needed
@@ -829,8 +807,10 @@ def Update_weekely_attendance_DB(request):
 
                 # STUDENT RECORDS UPLOAD TO DATABASE
                 # COMPUTER SCIENCE 100L STUDENTS ONLY
+
                 if department == 'Computer Science':
                     if level_int == 100:
+
                         comp_sci_100l_students_dir_path = os.path.join(settings.MEDIA_ROOT,
                                                                        'course_registeration/computer_science/100l')
                         comp_sci_100l_students_filename = f'computer_science_100l_{current_date}.csv'
@@ -855,11 +835,12 @@ def Update_weekely_attendance_DB(request):
 
                         # Upload most recent file to the computer_sci_100L DATABASE
 
-                        # Update the database with the new attendance scores
+                        # Update the database table field only  where table field matches the course_code
                         for index, row in df_comp_sci_100l.iterrows():
                             cur.execute(
                                 """
-                                INSERT INTO ettend_db.public.attendance_proj_comp_sci_100l (biometric_id, student_name, "CSC_101", "CSC_102", "CSC_105", "CSC_111", level, total_attendance_score, week, matric_num)
+                                INSERT INTO ettend_db.public.attendance_proj_comp_sci_100l 
+                                (biometric_id, student_name, "CSC_101", "CSC_102", "CSC_105", "CSC_111", level, total_attendance_score, week, matric_num)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 """,
                                 (row['BIOMETRICS_ID'], row['STUDENT_NAME'], row["CSC101"], row["CSC102"], row["CSC105"],
@@ -998,15 +979,15 @@ def Update_weekely_attendance_DB(request):
                 elif department == 'Political Science and Diplomacy':
                     if level_int == 100:
                         political_sci_100l_students_dir_path = os.path.join(settings.MEDIA_ROOT,
-                                                                          'course_registeration/political_science/100l')
+                                                                            'course_registeration/political_science/100l')
                         political_sci_100l_students_filename = f'political_sci_100l_{current_date}.csv'
                         political_sci_100l_students_file_path = os.path.join(political_sci_100l_students_dir_path,
-                                                                           political_sci_100l_students_filename)
+                                                                             political_sci_100l_students_filename)
 
                         df.to_csv(political_sci_100l_students_file_path, index=False)
 
                         political_sci_100l_students = [f for f in os.listdir(political_sci_100l_students_dir_path) if
-                                                     f.endswith('.csv')]
+                                                       f.endswith('.csv')]
 
                         # Find the most recent file based on the modification time
                         most_recent_file = max(political_sci_100l_students, key=lambda f: os.path.getmtime(
@@ -1014,7 +995,7 @@ def Update_weekely_attendance_DB(request):
 
                         # Read the most recent CSV file
                         most_recent_file_path_political_sci_100l = os.path.join(political_sci_100l_students_dir_path,
-                                                                            most_recent_file)
+                                                                                most_recent_file)
                         df_political_sci_100l = pd.read_csv(most_recent_file_path_political_sci_100l)
                         messages.success(request, "File uploaded and processed successfully NOW.")
                         print(df_political_sci_100l.head())
@@ -1029,7 +1010,7 @@ def Update_weekely_attendance_DB(request):
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                                 """,
                                 (row['BIOMETRICS_ID'], row['STUDENT_NAME'], row["PSC101"], row["PSC102"], row["PSC103"],
-                                 row["PSC104"], level_int, 0, 0,row['MATRIC_NO.'])
+                                 row["PSC104"], level_int, 0, 0, row['MATRIC_NO.'])
                             )
                             conn.commit()
                             cur.close()
@@ -1039,15 +1020,15 @@ def Update_weekely_attendance_DB(request):
                     # POLITICAL SCIENCE AND DIPLOMACY 200L STUDENTS ONLY
                     elif level_int == 200:
                         political_sci_200l_students_dir_path = os.path.join(settings.MEDIA_ROOT,
-                                                                          'course_registeration/political_science/200l')
+                                                                            'course_registeration/political_science/200l')
                         political_sci_200l_students_filename = f'political_sci_200l_{current_date}.csv'
                         political_sci_200l_students_file_path = os.path.join(political_sci_200l_students_dir_path,
-                                                                           political_sci_200l_students_filename)
+                                                                             political_sci_200l_students_filename)
 
                         df.to_csv(political_sci_200l_students_file_path, index=False)
 
                         political_sci_200l_students = [f for f in os.listdir(political_sci_200l_students_dir_path) if
-                                                     f.endswith('.csv')]
+                                                       f.endswith('.csv')]
 
                         # Find the most recent file based on the modification time
                         most_recent_file = max(political_sci_200l_students, key=lambda f: os.path.getmtime(
@@ -1055,7 +1036,7 @@ def Update_weekely_attendance_DB(request):
 
                         # Read the most recent CSV file
                         most_recent_file_path_political_sci_200l = os.path.join(political_sci_200l_students_dir_path,
-                                                                            most_recent_file)
+                                                                                most_recent_file)
                         df_political_sci_200l = pd.read_csv(most_recent_file_path_political_sci_200l)
                         messages.success(request, "File uploaded and processed successfully NOW.")
                         print(df_political_sci_200l.head())
@@ -1080,15 +1061,15 @@ def Update_weekely_attendance_DB(request):
                     # POLITICAL SCIENCE AND DIPLOMACY 300L STUDENTS ONLY
                     elif level_int == 300:
                         political_sci_300l_students_dir_path = os.path.join(settings.MEDIA_ROOT,
-                                                                          'course_registeration/political_science/300l')
+                                                                            'course_registeration/political_science/300l')
                         political_sci_300l_students_filename = f'political_sci_300l_{current_date}.csv'
                         political_sci_300l_students_file_path = os.path.join(political_sci_300l_students_dir_path,
-                                                                           political_sci_300l_students_filename)
+                                                                             political_sci_300l_students_filename)
 
                         df.to_csv(political_sci_300l_students_file_path, index=False)
 
                         political_sci_300l_students = [f for f in os.listdir(political_sci_300l_students_dir_path) if
-                                                     f.endswith('.csv')]
+                                                       f.endswith('.csv')]
 
                         # Find the most recent file based on the modification time
                         most_recent_file = max(political_sci_300l_students, key=lambda f: os.path.getmtime(
@@ -1096,7 +1077,7 @@ def Update_weekely_attendance_DB(request):
 
                         # Read the most recent CSV file
                         most_recent_file_path_political_sci_300l = os.path.join(political_sci_300l_students_dir_path,
-                                                                            most_recent_file)
+                                                                                most_recent_file)
                         df_political_sci_300l = pd.read_csv(most_recent_file_path_political_sci_300l)
                         messages.success(request, "File uploaded and processed successfully NOW.")
                         print(df_political_sci_300l.head())
@@ -1121,15 +1102,15 @@ def Update_weekely_attendance_DB(request):
                     # POLITICAL SCIENCE AND DIPLOMACY 400L STUDENTS ONLY
                     elif level_int == 400:
                         political_sci_400l_students_dir_path = os.path.join(settings.MEDIA_ROOT,
-                                                                          'course_registeration/political_science/400l')
+                                                                            'course_registeration/political_science/400l')
                         political_sci_400l_students_filename = f'political_sci_400l_{current_date}.csv'
                         political_sci_400l_students_file_path = os.path.join(political_sci_400l_students_dir_path,
-                                                                           political_sci_400l_students_filename)
+                                                                             political_sci_400l_students_filename)
 
                         df.to_csv(political_sci_400l_students_file_path, index=False)
 
                         political_sci_400l_students = [f for f in os.listdir(political_sci_400l_students_dir_path) if
-                                                     f.endswith('.csv')]
+                                                       f.endswith('.csv')]
 
                         # Find the most recent file based on the modification time
                         most_recent_file = max(political_sci_400l_students, key=lambda f: os.path.getmtime(
@@ -1137,7 +1118,7 @@ def Update_weekely_attendance_DB(request):
 
                         # Read the most recent CSV file
                         most_recent_file_path_political_sci_400l = os.path.join(political_sci_400l_students_dir_path,
-                                                                            most_recent_file)
+                                                                                most_recent_file)
                         df_political_sci_400l = pd.read_csv(most_recent_file_path_political_sci_400l)
                         messages.success(request, "File uploaded and processed successfully NOW.")
                         print(df_political_sci_400l.head())
@@ -1219,13 +1200,15 @@ def generate_qr_code(data):
     img.save(buffer, format="PNG")
     img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
     return img_str
+
+
 def attendance_score_card(request):
     if request.method == 'POST':
         department = request.POST.get('department')
         level = request.POST.get('Level')
         matric_num = request.POST.get('matric_num')
 
-        print(department,level,matric_num)
+        print(department, level, matric_num)
 
         try:
             level_int = int(level) if level else 0
@@ -1239,7 +1222,6 @@ def attendance_score_card(request):
             host='localhost',
             port='5432'
         )
-
 
         # for computer science department
         try:
@@ -1281,8 +1263,6 @@ def attendance_score_card(request):
                     student['qr_code'] = generate_qr_code(qr_data)
                 cur.close()
                 conn.close()
-
-
 
                 if not student_data:
                     raise ValueError('No data found for the given department, level, and matric number')
@@ -1343,3 +1323,421 @@ def attendance_score_card(request):
     return render(request, 'scorecard.html')
 
 
+#  upload staff biometric data captured   attendance records AND POPULATE THE DATABASE
+
+def staff_biometrics_upload(request):
+    if request.method == 'POST':
+        form = Upload_timetable_form(request.POST, request.FILES)
+        if form.is_valid():
+            file = form.cleaned_data['file']
+
+            df = pd.read_excel(file, engine='openpyxl')
+            current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+            # SAVE THE DATAFRAME TO A FOLDER
+
+            filename = f'STAFF_DATA/staff_biometrics_data{current_date}.csv'
+            file_path = os.path.join(settings.MEDIA_ROOT, filename)
+            df.to_csv(file_path, index=False)
+
+            # Ensure the "STAFF_DATA" directory exists
+            staff_biometrics_dir = os.path.join(settings.MEDIA_ROOT, 'STAFF_DATA')
+            if not os.path.exists(staff_biometrics_dir):
+                os.makedirs(staff_biometrics_dir)
+
+            # List CSV files in the directory
+            staff_biometrics = [f for f in os.listdir(staff_biometrics_dir) if f.endswith('.csv')]
+
+            # Check if the list is empty
+            if not staff_biometrics:
+                raise ValueError("No CSV files found in the directory")
+
+            # Find the most recent file based on the modification time
+            most_recent_file = max(staff_biometrics,
+                                   key=lambda f: os.path.getmtime(os.path.join(staff_biometrics_dir, f)))
+
+            # Read the most recent CSV file
+            most_recent_file_path = os.path.join(staff_biometrics_dir, most_recent_file)
+            df_staff_biometrics = pd.read_csv(most_recent_file_path)
+            print(df_staff_biometrics.head())
+            # print the head() of the staffid column
+            print(df_staff_biometrics['staffid'].head())
+
+            # extract staff ID S
+            extract_staff_department(df_staff_biometrics)
+
+            return redirect('success_url')
+
+        else:
+            messages.error(request, 'Invalid form submission. XLSX file required.')
+    else:
+        form = MachineForm()
+
+    return render(request, 'staff_upload.html', {'form': form})
+
+
+def extract_staff_department(staff_data):
+    # Check if the 'staffid' column exists in the DataFrame
+    if 'staffid' not in staff_data.columns:
+        raise KeyError("The 'staffid' column is missing from the DataFrame")
+
+    # Department mappings
+    department_map = {
+        'BCH': 'Biochemistry',
+        'MCB': 'Microbiology',
+        'PHY': 'Physics',
+        'CHM': 'Chemistry',
+        'CSC': 'Computer Science',
+        'EEG': 'Electrical Engineering',
+        'ECO': 'Economics',
+        'BSR': 'Biological Sciences',
+        'REG': 'Registry',
+        'MDC': 'Medical Sciences',
+        'MTH': 'Mathematics',
+        'ENG': 'English',
+        'GEO': 'Geography',
+        'HIS': 'History',
+        'LAW': 'Law',
+        'POL': 'Political Science',
+        'SOC': 'Sociology',
+        'ACC': 'Accounting',
+        'BUS': 'Business Administration',
+        'MKT': 'Marketing',
+        'FIN': 'Finance',
+        'AGR': 'Agriculture',
+        'ARC': 'Architecture',
+        'CIV': 'Civil Engineering',
+        'MEC': 'Mechanical Engineering',
+        'CHE': 'Chemical Engineering',
+        'NUR': 'Nursing',
+        'PHR': 'Pharmacy',
+        'DNT': 'Dentistry',
+        'MED': 'Medicine',
+        'VET': 'Veterinary Medicine',
+        'EDU': 'Education',
+        'ART': 'Fine Arts',
+        'MUS': 'Music',
+        'THE': 'Theology',
+        'PHL': 'Philosophy',
+        'REL': 'Religious Studies',
+        'PSY': 'Psychology',
+        'BIO': 'Biology',
+        'GNS': 'General Studies',
+        'SOC': 'Sociology',
+        'COM': 'Communication',
+        'PAD': 'Public Administration',
+        'GEO': 'Geography and Planning',
+        'STA': 'Statistics',
+        'PHE': 'Physical & Health Education',
+        'FSN': 'Food Science and Nutrition',
+        'FST': 'Food Science and Technology',
+        'BMS': 'Basic Medical Sciences',
+        'CPE': 'Computer Engineering',
+        'ASE': 'Aerospace Engineering',
+        'MRE': 'Marine Engineering',
+        'MET': 'Metallurgical Engineering',
+        'MAC': 'Mass Communication',
+        'PUB': 'Public Admin',
+        'SEN': 'software engineering',
+        'BFN': 'Banking and Finance',
+        'HIR': 'History intern Rel',
+        'MAT': 'Materials Science',
+        'OPT': 'Optometry',
+        'SUR': 'Surveying and Geoinformatics',
+        'QSM': 'Quantity Surveying',
+        'URP': 'Urban and Regional Planning',
+        'EST': 'Estate Management',
+        'FOR': 'Forestry',
+        'HMT': 'Hospitality and Tourism',
+        'HRM': 'Human Resource Management',
+        'PRS': 'Pharmaceutical Sciences',
+        'GDL': 'Guidance and Counselling',
+        'LIT': 'Literature',
+        'LIN': 'Linguistics',
+        'IRP': 'International Relations and Diplomacy',
+    }
+
+    # Initialize the 'dept' column with empty strings
+    staff_data['dept'] = ''
+
+    # Define a function to extract and map the department code
+    def map_department(staff_data):
+        parts = staff_data.split('/')
+        if len(parts) >= 2:
+            department_code = parts[1]
+            return department_map.get(department_code, 'Not found')
+        return 'Not found'
+
+    # Apply the function to the 'staffid' column to populate the 'dept' column
+    staff_data['dept'] = staff_data['staffid'].apply(map_department)
+    # SAVE THE MOST RECENT FILE TO THE STAFF_DATA_UPDATED FOLDER
+    save_updated_staff_data(staff_data)
+
+    # Optional: Print the first few rows to verify (remove or comment for production)
+    print(staff_data.head())
+    # upload staff_ids
+
+    return staff_data
+
+
+def save_updated_staff_data(staff_data):
+    # Define the path to the STAFF_DATA_UPDATED folder
+    updated_folder = os.path.join(settings.MEDIA_ROOT, 'STAFF_DATA_UPDATED')
+
+    # Ensure the folder exists
+    os.makedirs(updated_folder, exist_ok=True)
+
+    # Define the filename with the current timestamp
+    current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+    filename = f'staff_data_updated_{current_date}.csv'
+    file_path = os.path.join(updated_folder, filename)
+
+    # Save the updated DataFrame to the specified path
+    staff_data.to_csv(file_path, index=False)
+    print(f'Updated staff data saved to {file_path}')
+
+
+#view upload
+
+
+import os
+import psycopg2
+import pandas as pd
+from django.conf import settings
+
+
+def staff_biometrics_upload_view(request):
+    # Define the path to the STAFF_DATA_UPDATED folder
+    updated_folder = os.path.join(settings.MEDIA_ROOT, 'STAFF_DATA_UPDATED')
+
+    # Ensure the folder exists
+    if not os.path.exists(updated_folder):
+        return render(request, 'staff_view_upload.html', {'error': 'No updated staff data found'})
+
+    # List all CSV files in the folder
+    csv_files = [f for f in os.listdir(updated_folder) if f.endswith('.csv')]
+
+    if not csv_files:
+        return render(request, 'staff_view_upload.html', {'error': 'No CSV files found in the directory'})
+
+    # Find the most recent file based on the modification time
+    most_recent_file = max(csv_files, key=lambda x: os.path.getmtime(os.path.join(updated_folder, x)))
+
+    # Read the most recent CSV file into a DataFrame
+    most_recent_file_path = os.path.join(updated_folder, most_recent_file)
+    staff_data = pd.read_csv(most_recent_file_path)
+
+    # Convert the DataFrame to a dictionary with orient='records'
+    staff_data_dict = staff_data.to_dict(orient='records')
+
+    # Connect to the database
+    conn = psycopg2.connect(
+        dbname='ettend_db',
+        user='postgres',
+        password='blaze',
+        host='localhost',
+        port='5432'
+    )
+    cur = conn.cursor()
+
+    # Iterate over the staff data and insert or update each row into the database
+    for index, row in staff_data.iterrows():
+        id = row['ID']
+        staff_id = row['staffid']
+        staff_name = row['Name']
+        department = row['dept']
+        staff_score = 1  # Assuming this is static
+        attendance_status = 1  # Assuming this is static
+        remark = "absent"
+
+        # Use ON CONFLICT to update the record if the staff_id already exists
+        cur.execute(
+            """
+            INSERT INTO ettend_db.public.attendance_proj_staff_conference
+            (machine_id, staff_id, staff_name, staff_dept, attendance_score, remarks, conference_type, conference_category, conference_title, conference_venue)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (staff_id) 
+            DO UPDATE SET 
+                staff_name = EXCLUDED.staff_name,
+                staff_dept = EXCLUDED.staff_dept,
+                attendance_score = EXCLUDED.attendance_score,
+                remarks = EXCLUDED.remarks,
+                conference_type = EXCLUDED.conference_type,
+                conference_category = EXCLUDED.conference_category,
+                conference_title = EXCLUDED.conference_title,
+                conference_venue = EXCLUDED.conference_venue
+            """,
+            (id, staff_id, staff_name, department, staff_score, remark, "conference", "staff", "staff_conference",
+             "staff_conference_venue")
+        )
+
+    # Commit the changes and close the connection
+    conn.commit()
+    cur.close()
+    conn.close()
+
+    messages.success(request, "Staff data uploaded and saved successfully.")
+
+    # Render the data in the staff_view_upload.html template
+    return render(request, 'staff_view_upload.html', {'staff_data': staff_data_dict})
+
+
+def staff_events_creation(request):
+    if request.method == 'POST':
+        event_title = request.POST.get('event_title')
+        event_date = request.POST.get('event_date')
+        event_time = request.POST.get('event_time')
+        event_venue = request.POST.get('event_venue')
+        event_type = request.POST.get('event_type')
+        event_category = request.POST.get('event_category')
+        form = Upload_staff_events_attendance(request.POST, request.FILES)
+
+        if form.is_valid():
+            file = form.cleaned_data['file']
+
+            staff_attend = pd.read_excel(file, engine='openpyxl')
+            current_date = datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
+
+            # Save the DataFrame to a folder
+            filename = f'STAFF_EVENT_ATTENDANCE/staff_event_data{current_date}.csv'
+            file_path = os.path.join(settings.MEDIA_ROOT, filename)
+            staff_attend.to_csv(file_path, index=False)
+
+        # Connect to the database
+        conn = psycopg2.connect(
+            dbname='ettend_db',
+            user='postgres',
+            password='blaze',
+            host='localhost',
+            port='5432'
+        )
+        if conn:
+            print("Database connection successful")
+        else:
+            print("Database connection failed")
+
+        cur = conn.cursor()  # Create cursor once, before the loop
+
+        # Iterate over the staff_attend DataFrame to update the database
+        for index, row in staff_attend.iterrows():
+            staff_id = row['staffid']
+            staff_name = row['Name']
+            department = row['dept']
+            staff_score = 1
+            attendance_status = 1
+
+            print(f"Processing staff ID: {staff_id}")  # Debugging
+
+            if event_type == "conference":
+                cur.execute(
+                    "UPDATE ettend_db.public.attendance_proj_staff_conference "
+                    "SET staff_dept = %s, conference_title = %s, conference_date = %s, "
+                    "conference_time = %s, conference_venue = %s, conference_category = %s, remarks = %s, attendance_score = %s "
+                    "WHERE staff_id = %s",
+                    (department, event_title, event_date, event_time, event_venue, event_category, "present",
+                     attendance_status, staff_id)
+                )
+                rows_updated = cur.rowcount
+                if rows_updated == 0:
+                    print(f"No rows updated for staff_id {staff_id}")
+                else:
+                    print(f"{rows_updated} row(s) updated for staff_id {staff_id}")
+
+        # Commit once after processing all rows
+        conn.commit()
+        print("Changes committed to the database")
+
+        # Close cursor and connection
+        cur.close()
+        conn.close()
+        print("Connection closed")
+
+        messages.success(request, "Event created successfully")
+        staff_event_attendance_generator(event_title, event_date)
+        return redirect('staff_event_create')
+    else:
+        form = Upload_staff_events_attendance()
+
+    return render(request, 'staff_create_event.html', {'form': form})
+
+
+# staff event attendance view
+def staff_event_attendance_generator(request):
+    today = date.today()
+    today_format = today.strftime("%d/%m/%Y")
+
+    try:
+        # Connect to the database
+        conn = psycopg2.connect(
+            dbname='ettend_db',
+            user='postgres',
+            password='blaze',
+            host='localhost',
+            port='5432'
+        )
+        if conn:
+            print("Database connection successful")
+        else:
+            print("Database connection failed")
+
+        # Create a cursor and execute the query
+        cur = conn.cursor()
+
+        # Get column names to map the results
+        cur.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_name = 'attendance_proj_staff_conference'"
+        )
+        column_names = [col[0] for col in cur.fetchall()]
+
+        # Execute the query to fetch all records
+        cur.execute("SELECT * FROM ettend_db.public.attendance_proj_staff_conference")
+        staff_event_attendance = cur.fetchall()
+
+        if not staff_event_attendance:
+            print("No records found in the table.")
+            staff_event_attendance = []  # Set to empty list if no records found
+
+        # Convert to a list of dictionaries
+        attendance_list = [dict(zip(column_names, row)) for row in staff_event_attendance]
+
+        # Generate QR codes for each staff member in the attendance list
+        for staff in attendance_list:
+            total_possible_score = 15  # Assuming this is a fixed value
+            # Generate QR code containing the staff ID, event type, and today's date
+            qr_data = f"AUTH :  | E-TTEND | VERITAS UNIVERSITY ABUJA, STAFF ORIENTATION | {today_format}"
+            staff['qr_code'] = staff_auth_generate_qr_code(qr_data)
+            # TOTAL ROWS IN THE DATABASE
+            staff['total_rows'] = len(attendance_list)
+
+        # Close the cursor and connection
+        cur.close()
+        conn.close()
+        print("Connection closed")
+
+    except (Exception, psycopg2.DatabaseError) as error:
+        print(f"Error: {error}")
+        return render(request, 'staff_generate_attendance.html', {'error': "Failed to fetch attendance records."})
+
+    # Render the results in the template
+    return render(request, 'staff_generate_attendance.html', {'staff_event_attendance': attendance_list})
+
+
+def staff_auth_generate_qr_code(data):
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_L,
+        box_size=10,
+        border=4,
+    )
+    # Combine data into a string for the QR code
+
+    qr.add_data(data)
+    qr.make(fit=True)
+
+    # Create the image in memory
+    img = qr.make_image(fill_color="black", back_color="white")
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+
+    # Encode the image in base64 and return it as a string
+    img_str = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    return img_str

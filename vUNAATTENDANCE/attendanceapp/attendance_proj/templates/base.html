@@ -159,19 +159,34 @@
                         <a href="#" class="menu-toggle nav-link has-dropdown"><i data-feather="feather"></i><span>Quality assurance </span></a>
                         <ul class="dropdown-menu">
                             <li><a class="nav-link" href="{% url 'student_attendance' %}">student attendance</a></li>
-                            <li><a class="nav-link" href="email-compose.html">search attendance </a></li>
+                           
                             <li><a class="nav-link" href="email-read.html">suggestion </a></li>
                         </ul>
                     </li>
                     <li class="dropdown">
-                        <a href="#" class="menu-toggle nav-link has-dropdown"><i data-feather="briefcase"></i><span>Unscheduled events</span></a>
+                        <a href="#" class="menu-toggle nav-link has-dropdown"><i data-feather="briefcase"></i><span>staff  events</span></a>
+                        
+                        <ul class="dropdown-menu">
+                    
+                            <li><a class="nav-link" href="{% url 'staff_biometrics_upload' %}">upload staff machine data </a></li>
+                    
+                            <li><a class="nav-link" href="{% url 'staff_biometrics_view'%}">view uploaded data </a></li>
+                            <li><a class="nav-link" href="{% url 'staff_event_create'%}">create staff event  </a></li>
+                            <li><a class="nav-link" href="{% url 'staff_event_attendance'%}"> event attendance  </a></li>
+                            <li><a class="nav-link" href="email-compose.html">score card </a></li>
+                            <li><a class="nav-link" href="email-compose.html"> Analysis </a></li>
+                            
+                        </ul>
+                    </li>
+                      <li class="dropdown">
+                        <a href="#" class="menu-toggle nav-link has-dropdown"><i data-feather="briefcase"></i><span>unscheduled events</span></a>
                         
                         <ul class="dropdown-menu">
                     
                             <li><a class="nav-link" href="{% url 'unscheduled_attendance' %}">upload machince data </a></li>
                     
-                            <li><a class="nav-link" href="{% url 'upload_view'%}">view records</a></li>
-                            <li><a class="nav-link" href="email-compose.html">search attendance </a></li>
+                            <li><a class="nav-link" href="{% url 'upload_view'%}">capture staff details </a></li>
+                            <li><a class="nav-link" href="email-compose.html">conference </a></li>
                         </ul>
                     </li>
                        <li class="dropdown">

@@ -26,7 +26,11 @@ urlpatterns = [
     path('summary_attendance', views.summary_attendance, name='summary_attend'),
     path('track_attendance/', views.track_attendance, name='track_attendance'),
     path('upload_registered_students/', views.Update_weekely_attendance_DB, name='dept_upload'),
+    path('upload_staff_biometrics_data',views.staff_biometrics_upload,name='staff_biometrics_upload'),
+    path('staff_biometrics_view',views.staff_biometrics_upload_view,name='staff_biometrics_view'),
+    path('staff_event_creation',views.staff_events_creation,name='staff_event_create'),
     path('score_card/', views.attendance_score_card, name='scorecard'),
+    path('staff_event_attendance/', views.staff_event_attendance_generator, name='staff_event_attendance'),
 
 
 ]

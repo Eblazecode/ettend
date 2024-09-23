@@ -43,6 +43,10 @@ class Upload_registered_students(forms.Form):
     file = forms.FileField()
 
 
+class Upload_staff_events_attendance(forms.Form):
+    file = forms.FileField()
+
+
 class MachineForm(forms.Form):
     file = forms.FileField()
 
